@@ -9,7 +9,7 @@ import (
 
 const csvHeader = "DOCUMENT_NUMBER;SELLER_NAME;AMOUNT_RECORDS;AVG_FUTURE_VALUE;MAX_FUTURE_VALUE;MIN_FUTURE_VALUE;AVG_FUTURE_VALUE;MAX_FUTURE_VALUE;MIN_FUTURE_VALUE;AVG_PRESENT_VALUE;MAX_PRESENT_VALUE;AVG_ACQUISITION_VALUE; MAX_ACQUISITION_VALUE; MIN_ACQUISITION_VALUE\n"
 
-var combinedMap = make(map[string]*Aggregate)
+var combinedMap = make(map[int32]*Aggregate)
 
 func Combine(aggregate *Aggregate) {
 	if _, ok := combinedMap[aggregate.DocumentNumber]; ok {
@@ -40,7 +40,7 @@ func Write() {
 func generateLine(aggregate *Aggregate) string {
 	numRecords := float32(aggregate.AmountOfRecords)
 
-	return fmt.Sprintf("%s;%s;%d;%f;%f;%f;%f;%f;%f;%f;%f;%f\n",
+	return fmt.Sprintf("%d;%s;%d;%f;%f;%f;%f;%f;%f;%f;%f;%f\n",
 		aggregate.DocumentNumber, aggregate.SellerName, aggregate.AmountOfRecords, aggregate.SumFutureValue/numRecords, aggregate.MaxFutureValue, aggregate.MinFutureValue,
 		aggregate.SumPresentValue/numRecords, aggregate.MaxPresentValue, aggregate.MinPresentValue,
 		aggregate.SumAcquisitionValue/numRecords, aggregate.MaxAcquisitionValue, aggregate.MinAcquisitionValue)

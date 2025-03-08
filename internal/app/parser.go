@@ -9,10 +9,7 @@ import (
 	"sync"
 )
 
-// Size of the batch of aggregates to be sent to the main goroutine
-const BatchSize = 10000
-
-// Fields from the csv along with their column indices
+// Fields from the csv along with their column indices in the csv
 var Fields = struct {
 	SellerName         int8
 	SellerGovernmentId int8
@@ -28,34 +25,31 @@ var Fields = struct {
 	PresentValue:       10,
 	AcquisitionValue:   11,
 	DocumentNumber:     16,
-	MaxIndex:           16,
 }
 
-// DocumentNumber should be [x]byte
-// SellerName can be [255]byte or []byte
 type Aggregate struct {
-	DocumentNumber      string
-	SellerName          string
-	MinFutureValue      float32
-	MaxFutureValue      float32
-	SumFutureValue      float32
-	MinPresentValue     float32
-	MaxPresentValue     float32
-	SumPresentValue     float32
-	MinAcquisitionValue float32
-	MaxAcquisitionValue float32
-	SumAcquisitionValue float32
-	SellerGovernmentId  [11]byte
-	AmountOfRecords     int8
+	SellerName          []byte   // 24 bytes
+	MinFutureValue      float32  // 4 bytes
+	MaxFutureValue      float32  // 4 bytes
+	SumFutureValue      float32  // 4 bytes
+	MinPresentValue     float32  // 4 bytes
+	MaxPresentValue     float32  // 4 bytes
+	SumPresentValue     float32  // 4 bytes
+	MinAcquisitionValue float32  // 4 bytes
+	MaxAcquisitionValue float32  // 4 bytes
+	SumAcquisitionValue float32  // 4 bytes
+	DocumentNumber      int32    // 4 bytes
+	SellerGovernmentId  [11]byte // 11 bytes
+	AmountOfRecords     int8     // 1 byte
 }
 
 type SimplifiedAggregate struct {
-	SellerName         string
-	DocumentNumber     string
-	FutureValue        float32
-	PresentValue       float32
-	AcquisitionValue   float32
-	SellerGovernmentId [11]byte
+	SellerName         []byte   // 24 bytes
+	FutureValue        float32  // 4 bytes
+	PresentValue       float32  // 4 bytes
+	AcquisitionValue   float32  // 4 bytes
+	DocumentNumber     int32    // 4 bytes
+	SellerGovernmentId [11]byte // 11 bytes
 }
 
 func (aggregate *Aggregate) Sum(newAggregate *Aggregate) {
@@ -121,11 +115,13 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 			// Append aggregate to slice if the file has ended
 			if !shouldRead {
 				ch <- aggregate
+				releaseOwnership(&aggregate.SellerName)
 			}
 
 		} else {
-			if aggregate.DocumentNumber != "" {
+			if aggregate.DocumentNumber != 0 {
 				ch <- aggregate
+				releaseOwnership(&aggregate.SellerName)
 			}
 
 			aggregate.SumFutureValue = tmpAggregate.FutureValue
@@ -143,7 +139,7 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 			aggregate.AmountOfRecords = 1
 			aggregate.DocumentNumber = tmpAggregate.DocumentNumber
 			aggregate.SellerGovernmentId = tmpAggregate.SellerGovernmentId
-			aggregate.SellerName = tmpAggregate.SellerName
+			copyBytes(&aggregate.SellerName, tmpAggregate.SellerName)
 		}
 	}
 }
@@ -162,9 +158,10 @@ func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte) {
 
 		switch fieldNum {
 		case Fields.SellerName:
-			tmpAggregate.SellerName = string(line[startIndex:endIndex])
+			tmpAggregate.SellerName = line[startIndex:endIndex]
 		case Fields.DocumentNumber:
-			tmpAggregate.DocumentNumber = string(line[startIndex:endIndex])
+			val, _ := strconv.ParseInt(string(line[startIndex:endIndex]), 0, 32)
+			tmpAggregate.DocumentNumber = int32(val)
 		case Fields.FutureValue:
 			val, _ := strconv.ParseFloat(string(line[startIndex:endIndex]), 32)
 			tmpAggregate.FutureValue = float32(val)
@@ -181,7 +178,7 @@ func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte) {
 		fieldNum++
 
 		// Stop parsing once the most distant columns has been parsed
-		if fieldNum > Fields.MaxIndex {
+		if fieldNum > Fields.DocumentNumber {
 			return
 		}
 
@@ -199,4 +196,22 @@ func parseGovernmentId(governmentId []byte, formattedGovernmentId *[11]byte) {
 			counter++
 		}
 	}
+}
+
+func copyBytes(receiver *[]byte, sender []byte) {
+	if len(sender) > cap(*receiver) {
+		*receiver = make([]byte, len(sender))
+	} else {
+		*receiver = (*receiver)[:len(sender)]
+	}
+
+	copy(*receiver, sender)
+}
+
+/*
+* Removes the reference of a slice (needed for []byte fields when passing
+* from the parsers to the consumer goroutine)
+ */
+func releaseOwnership(slice *[]byte) {
+	*slice = nil
 }
