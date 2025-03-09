@@ -19,6 +19,7 @@ func main() {
 
 func run() {
 	files := [10]string{
+		//"data/test.csv",
 		"data/58148845000109_Estoque_PICPAY FGTS FIDC_001.csv",
 		"data/58148845000109_Estoque_PICPAY FGTS FIDC_0039.csv",
 		"data/58148845000109_Estoque_PICPAY FGTS FIDC_0040.csv",

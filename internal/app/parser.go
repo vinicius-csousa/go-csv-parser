@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -163,13 +164,22 @@ func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte) {
 			val, _ := strconv.ParseInt(string(line[startIndex:endIndex]), 0, 32)
 			tmpAggregate.DocumentNumber = int32(val)
 		case Fields.FutureValue:
-			val, _ := strconv.ParseFloat(string(line[startIndex:endIndex]), 32)
+			val, err := strconv.ParseFloat(strings.ReplaceAll(string(line[startIndex:endIndex]), ",", ""), 32)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
 			tmpAggregate.FutureValue = float32(val)
 		case Fields.PresentValue:
-			val, _ := strconv.ParseFloat(string(line[startIndex:endIndex]), 32)
+			val, err := strconv.ParseFloat(strings.ReplaceAll(string(line[startIndex:endIndex]), ",", ""), 32)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
 			tmpAggregate.PresentValue = float32(val)
 		case Fields.AcquisitionValue:
-			val, _ := strconv.ParseFloat(string(line[startIndex:endIndex]), 32)
+			val, err := strconv.ParseFloat(strings.ReplaceAll(string(line[startIndex:endIndex]), ",", ""), 32)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
 			tmpAggregate.AcquisitionValue = float32(val)
 		case Fields.SellerGovernmentId:
 			parseGovernmentId(line[startIndex:endIndex], &tmpAggregate.SellerGovernmentId)
