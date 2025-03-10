@@ -37,10 +37,15 @@ func run() {
 	// Channel to receive data from parsers
 	ch := make(chan parser.Aggregate)
 
+	allowedSponsorNames := [][]byte{
+		// []byte("CAIO CLEMENTE"),
+		// []byte("JOEL  JOEL"),
+	}
+
 	// Call for goroutines to parse files
 	for i := 0; i < len(files); i++ {
 		wg.Add(1)
-		go parser.Parse(files[i], ';', ch, &wg)
+		go parser.Parse(files[i], ';', ch, &wg, allowedSponsorNames)
 	}
 
 	go func() {

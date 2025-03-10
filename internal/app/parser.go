@@ -12,51 +12,51 @@ import (
 
 // Fields from the csv along with their column indices in the csv
 var Fields = struct {
-	SellerName         int8
-	SellerGovernmentId int8
-	FutureValue        int8
-	PresentValue       int8
-	AcquisitionValue   int8
-	DocumentNumber     int8
-	MaxIndex           int8
+	SellerName          int8
+	SponsorName         int8
+	SponsorGovernmentId int8
+	NominalValue        int8
+	PresentValue        int8
+	AcquisitionValue    int8
+	DocumentNumber      int8
 }{
-	SellerName:         6,
-	SellerGovernmentId: 7,
-	FutureValue:        9,
-	PresentValue:       10,
-	AcquisitionValue:   11,
-	DocumentNumber:     16,
+	SellerName:          4,
+	SponsorName:         6,
+	SponsorGovernmentId: 7,
+	NominalValue:        9,
+	PresentValue:        10,
+	AcquisitionValue:    11,
+	DocumentNumber:      16,
 }
 
 type Aggregate struct {
-	SellerName          []byte   // 24 bytes
-	MinFutureValue      float32  // 4 bytes
-	MaxFutureValue      float32  // 4 bytes
-	SumFutureValue      float32  // 4 bytes
-	MinPresentValue     float32  // 4 bytes
-	MaxPresentValue     float32  // 4 bytes
-	SumPresentValue     float32  // 4 bytes
-	MinAcquisitionValue float32  // 4 bytes
-	MaxAcquisitionValue float32  // 4 bytes
-	SumAcquisitionValue float32  // 4 bytes
-	DocumentNumber      int32    // 4 bytes
-	SellerGovernmentId  [11]byte // 11 bytes
-	AmountOfRecords     int8     // 1 byte
+	SponsorName         []byte  // 24 bytes
+	MinNominalValue     float32 // 4 bytes
+	MaxNominalValue     float32 // 4 bytes
+	SumNominalValue     float32 // 4 bytes
+	MinPresentValue     float32 // 4 bytes
+	MaxPresentValue     float32 // 4 bytes
+	SumPresentValue     float32 // 4 bytes
+	MinAcquisitionValue float32 // 4 bytes
+	MaxAcquisitionValue float32 // 4 bytes
+	SumAcquisitionValue float32 // 4 bytes
+	DocumentNumber      int32   // 4 bytes
+	AmountOfRecords     int8    // 1 byte
 }
 
 type SimplifiedAggregate struct {
-	SellerName         []byte   // 24 bytes
-	FutureValue        float32  // 4 bytes
-	PresentValue       float32  // 4 bytes
-	AcquisitionValue   float32  // 4 bytes
-	DocumentNumber     int32    // 4 bytes
-	SellerGovernmentId [11]byte // 11 bytes
+	SponsorName      []byte  // 24 bytes
+	SellerName       []byte  // 24 bytes
+	NominalValue     float32 // 4 bytes
+	PresentValue     float32 // 4 bytes
+	AcquisitionValue float32 // 4 bytes
+	DocumentNumber   int32   // 4 bytes
 }
 
 func (aggregate *Aggregate) Sum(newAggregate *Aggregate) {
-	aggregate.SumFutureValue += newAggregate.SumFutureValue
-	aggregate.MaxFutureValue = max(aggregate.MaxFutureValue, newAggregate.MaxFutureValue)
-	aggregate.MinFutureValue = min(aggregate.MinFutureValue, newAggregate.MinFutureValue)
+	aggregate.SumNominalValue += newAggregate.SumNominalValue
+	aggregate.MaxNominalValue = max(aggregate.MaxNominalValue, newAggregate.MaxNominalValue)
+	aggregate.MinNominalValue = min(aggregate.MinNominalValue, newAggregate.MinNominalValue)
 
 	aggregate.SumPresentValue += newAggregate.SumPresentValue
 	aggregate.MaxPresentValue = max(aggregate.MaxPresentValue, newAggregate.MaxPresentValue)
@@ -69,7 +69,7 @@ func (aggregate *Aggregate) Sum(newAggregate *Aggregate) {
 	aggregate.AmountOfRecords += newAggregate.AmountOfRecords
 }
 
-func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGroup) {
+func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGroup, allowedSponsorNames [][]byte) {
 	file, err := os.Open(filepath)
 	if err != nil {
 		log.Fatalf("Failed to open file: %s", filepath)
@@ -84,6 +84,7 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 	reader := bufio.NewReader(file)
 	reader.ReadSlice('\n') // skip header
 
+	var shouldSendPrevious bool
 	shouldRead := true
 	for shouldRead {
 		// Read csv line by line
@@ -96,12 +97,12 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 			shouldRead = false
 		}
 
-		parseLine(line, &tmpAggregate, separator)
+		shouldSend := parseLine(line, &tmpAggregate, separator, allowedSponsorNames)
 
 		if tmpAggregate.DocumentNumber == aggregate.DocumentNumber {
-			aggregate.SumFutureValue += tmpAggregate.FutureValue
-			aggregate.MaxFutureValue = max(aggregate.MaxFutureValue, tmpAggregate.FutureValue)
-			aggregate.MinFutureValue = min(aggregate.MinFutureValue, tmpAggregate.FutureValue)
+			aggregate.SumNominalValue += tmpAggregate.NominalValue
+			aggregate.MaxNominalValue = max(aggregate.MaxNominalValue, tmpAggregate.NominalValue)
+			aggregate.MinNominalValue = min(aggregate.MinNominalValue, tmpAggregate.NominalValue)
 
 			aggregate.SumPresentValue += tmpAggregate.PresentValue
 			aggregate.MaxPresentValue = max(aggregate.MaxPresentValue, tmpAggregate.PresentValue)
@@ -113,21 +114,21 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 
 			aggregate.AmountOfRecords++
 
-			// Append aggregate to slice if the file has ended
-			if !shouldRead {
+			// Send aggregate if the file has ended
+			if !shouldRead && shouldSend {
 				ch <- aggregate
-				releaseOwnership(&aggregate.SellerName)
+				releaseOwnership(&aggregate.SponsorName)
 			}
 
 		} else {
-			if aggregate.DocumentNumber != 0 {
+			if aggregate.DocumentNumber != 0 && shouldSendPrevious {
 				ch <- aggregate
-				releaseOwnership(&aggregate.SellerName)
+				releaseOwnership(&aggregate.SponsorName)
 			}
 
-			aggregate.SumFutureValue = tmpAggregate.FutureValue
-			aggregate.MaxFutureValue = tmpAggregate.FutureValue
-			aggregate.MinFutureValue = tmpAggregate.FutureValue
+			aggregate.SumNominalValue = tmpAggregate.NominalValue
+			aggregate.MaxNominalValue = tmpAggregate.NominalValue
+			aggregate.MinNominalValue = tmpAggregate.NominalValue
 
 			aggregate.SumPresentValue = tmpAggregate.PresentValue
 			aggregate.MaxPresentValue = tmpAggregate.PresentValue
@@ -139,13 +140,14 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 
 			aggregate.AmountOfRecords = 1
 			aggregate.DocumentNumber = tmpAggregate.DocumentNumber
-			aggregate.SellerGovernmentId = tmpAggregate.SellerGovernmentId
-			copyBytes(&aggregate.SellerName, tmpAggregate.SellerName)
+			copyBytes(&aggregate.SponsorName, tmpAggregate.SponsorName)
 		}
+
+		shouldSendPrevious = shouldSend
 	}
 }
 
-func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte) {
+func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte, allowedSponsorNames [][]byte) bool {
 	var startIndex int16
 	var endIndex int16
 	var fieldNum int8
@@ -160,15 +162,17 @@ func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte) {
 		switch fieldNum {
 		case Fields.SellerName:
 			tmpAggregate.SellerName = line[startIndex:endIndex]
+		case Fields.SponsorName:
+			tmpAggregate.SponsorName = line[startIndex:endIndex]
 		case Fields.DocumentNumber:
 			val, _ := strconv.ParseInt(string(line[startIndex:endIndex]), 0, 32)
 			tmpAggregate.DocumentNumber = int32(val)
-		case Fields.FutureValue:
+		case Fields.NominalValue:
 			val, err := strconv.ParseFloat(strings.ReplaceAll(string(line[startIndex:endIndex]), ",", ""), 32)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			tmpAggregate.FutureValue = float32(val)
+			tmpAggregate.NominalValue = float32(val)
 		case Fields.PresentValue:
 			val, err := strconv.ParseFloat(strings.ReplaceAll(string(line[startIndex:endIndex]), ",", ""), 32)
 			if err != nil {
@@ -181,19 +185,18 @@ func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte) {
 				log.Fatal(err.Error())
 			}
 			tmpAggregate.AcquisitionValue = float32(val)
-		case Fields.SellerGovernmentId:
-			parseGovernmentId(line[startIndex:endIndex], &tmpAggregate.SellerGovernmentId)
 		}
 
 		fieldNum++
 
 		// Stop parsing once the most distant columns has been parsed
 		if fieldNum > Fields.DocumentNumber {
-			return
+			return FilterName(tmpAggregate.SponsorName, allowedSponsorNames)
 		}
 
 		startIndex = endIndex + 1
 	}
+	return FilterName(tmpAggregate.SponsorName, allowedSponsorNames)
 }
 
 // Remove special characters from governmentIds

@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const csvHeader = "DOCUMENT_NUMBER;SELLER_NAME;AMOUNT_RECORDS;AVG_FUTURE_VALUE;MAX_FUTURE_VALUE;MIN_FUTURE_VALUE;AVG_FUTURE_VALUE;MAX_FUTURE_VALUE;MIN_FUTURE_VALUE;AVG_PRESENT_VALUE;MAX_PRESENT_VALUE;AVG_ACQUISITION_VALUE; MAX_ACQUISITION_VALUE; MIN_ACQUISITION_VALUE\n"
+const csvHeader = "DOCUMENT_NUMBER;SELLER_NAME;AMOUNT_RECORDS;SUM_NOMINAL_VALUE;AVG_NOMINAL_VALUE;MAX_NOMINAL_VALUE;MIN_NOMINAL_VALUE;SUM_PRESENT_VALUE;AVG_PRESENT_VALUE;MAX_PRESENT_VALUE;MIN_PRESENT_VALUE;SUM_ACQUISITION_VALUE;AVG_ACQUISITION_VALUE; MAX_ACQUISITION_VALUE; MIN_ACQUISITION_VALUE\n"
 
 var combinedMap = make(map[int32]*Aggregate)
 
@@ -29,19 +29,18 @@ func Write() {
 	writer := bufio.NewWriter(file)
 	writer.WriteString(csvHeader)
 
+	var numRecords float32
 	for _, aggregate := range combinedMap {
-		writer.WriteString(generateLine(aggregate))
+		numRecords = float32(aggregate.AmountOfRecords)
+
+		fmt.Fprintf(writer, "%d;%s;%d;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f\n",
+			aggregate.DocumentNumber, aggregate.SponsorName, aggregate.AmountOfRecords, aggregate.SumNominalValue, aggregate.SumNominalValue/numRecords,
+			aggregate.MaxNominalValue, aggregate.MinNominalValue, aggregate.SumPresentValue, aggregate.SumPresentValue/numRecords, aggregate.MaxPresentValue,
+			aggregate.MinPresentValue, aggregate.SumAcquisitionValue, aggregate.SumAcquisitionValue/numRecords, aggregate.MaxAcquisitionValue, aggregate.MinAcquisitionValue)
+
+		delete(combinedMap, aggregate.DocumentNumber)
 	}
 
 	// Writes remaining buffered lines
 	writer.Flush()
-}
-
-func generateLine(aggregate *Aggregate) string {
-	numRecords := float32(aggregate.AmountOfRecords)
-
-	return fmt.Sprintf("%d;%s;%d;%f;%f;%f;%f;%f;%f;%f;%f;%f\n",
-		aggregate.DocumentNumber, aggregate.SellerName, aggregate.AmountOfRecords, aggregate.SumFutureValue/numRecords, aggregate.MaxFutureValue, aggregate.MinFutureValue,
-		aggregate.SumPresentValue/numRecords, aggregate.MaxPresentValue, aggregate.MinPresentValue,
-		aggregate.SumAcquisitionValue/numRecords, aggregate.MaxAcquisitionValue, aggregate.MinAcquisitionValue)
 }
