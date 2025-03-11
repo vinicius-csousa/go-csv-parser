@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"log"
 	"os"
@@ -30,7 +31,6 @@ var Fields = struct {
 }
 
 type Aggregate struct {
-	SponsorName         []byte  // 24 bytes
 	MinNominalValue     float32 // 4 bytes
 	MaxNominalValue     float32 // 4 bytes
 	SumNominalValue     float32 // 4 bytes
@@ -69,7 +69,7 @@ func (aggregate *Aggregate) Sum(newAggregate *Aggregate) {
 	aggregate.AmountOfRecords += newAggregate.AmountOfRecords
 }
 
-func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGroup, allowedSponsorNames [][]byte) {
+func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGroup, filter Filter) {
 	file, err := os.Open(filepath)
 	if err != nil {
 		log.Fatalf("Failed to open file: %s", filepath)
@@ -97,7 +97,7 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 			shouldRead = false
 		}
 
-		shouldSend := parseLine(line, &tmpAggregate, separator, allowedSponsorNames)
+		shouldSend := parseLine(line, &tmpAggregate, separator, filter)
 
 		if tmpAggregate.DocumentNumber == aggregate.DocumentNumber {
 			aggregate.SumNominalValue += tmpAggregate.NominalValue
@@ -117,13 +117,11 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 			// Send aggregate if the file has ended
 			if !shouldRead && shouldSend {
 				ch <- aggregate
-				releaseOwnership(&aggregate.SponsorName)
 			}
 
 		} else {
 			if aggregate.DocumentNumber != 0 && shouldSendPrevious {
 				ch <- aggregate
-				releaseOwnership(&aggregate.SponsorName)
 			}
 
 			aggregate.SumNominalValue = tmpAggregate.NominalValue
@@ -140,14 +138,13 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 
 			aggregate.AmountOfRecords = 1
 			aggregate.DocumentNumber = tmpAggregate.DocumentNumber
-			copyBytes(&aggregate.SponsorName, tmpAggregate.SponsorName)
 		}
 
 		shouldSendPrevious = shouldSend
 	}
 }
 
-func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte, allowedSponsorNames [][]byte) bool {
+func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte, filter Filter) bool {
 	var startIndex int16
 	var endIndex int16
 	var fieldNum int8
@@ -191,12 +188,25 @@ func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte, a
 
 		// Stop parsing once the most distant columns has been parsed
 		if fieldNum > Fields.DocumentNumber {
-			return FilterName(tmpAggregate.SponsorName, allowedSponsorNames)
+			return filterLine(filter, tmpAggregate)
 		}
 
 		startIndex = endIndex + 1
 	}
-	return FilterName(tmpAggregate.SponsorName, allowedSponsorNames)
+	return filterLine(filter, tmpAggregate)
+}
+
+func filterLine(filter Filter, aggregate *SimplifiedAggregate) bool {
+	val, ok := filter.(*NameFilter)
+	if ok {
+		if bytes.Equal(val.Field, []byte("seller")) {
+			return filter.Filter(aggregate.SellerName)
+		}
+		if bytes.Equal(val.Field, []byte("sponsor")) {
+			return filter.Filter(aggregate.SponsorName)
+		}
+	}
+	return true
 }
 
 // Remove special characters from governmentIds

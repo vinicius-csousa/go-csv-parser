@@ -32,20 +32,17 @@ func run() {
 		"data/58148845000109_Estoque_PICPAY FGTS FIDC_0047.csv",
 	}
 
-	// Wait group to sync parsers
+	// WaitGroup to sync parsers
 	var wg sync.WaitGroup
 	// Channel to receive data from parsers
 	ch := make(chan parser.Aggregate)
 
-	allowedSponsorNames := [][]byte{
-		// []byte("CAIO CLEMENTE"),
-		// []byte("JOEL  JOEL"),
-	}
+	filter := parser.ParseFilter()
 
 	// Call for goroutines to parse files
 	for i := 0; i < len(files); i++ {
 		wg.Add(1)
-		go parser.Parse(files[i], ';', ch, &wg, allowedSponsorNames)
+		go parser.Parse(files[i], ';', ch, &wg, filter)
 	}
 
 	go func() {
@@ -53,11 +50,14 @@ func run() {
 		defer close(ch)
 	}()
 
+	file, writer := parser.CreateOutputFile()
+	defer file.Close()
+
 	for aggregate := range ch {
 		parser.Combine(&aggregate)
 	}
 
-	parser.Write()
+	parser.Write(writer)
 }
 
 func registerPProf() {
