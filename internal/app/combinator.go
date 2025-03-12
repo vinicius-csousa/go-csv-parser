@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const csvHeader = "DOCUMENT_NUMBER;AMOUNT_RECORDS;SUM_NOMINAL_VALUE;AVG_NOMINAL_VALUE;MAX_NOMINAL_VALUE;MIN_NOMINAL_VALUE;SUM_PRESENT_VALUE;AVG_PRESENT_VALUE;MAX_PRESENT_VALUE;MIN_PRESENT_VALUE;SUM_ACQUISITION_VALUE;AVG_ACQUISITION_VALUE; MAX_ACQUISITION_VALUE; MIN_ACQUISITION_VALUE\n"
+const csvHeader = "NU_DOCUMENTO;VALOR_NOMINAL_SUM;VALOR_NOMINAL_AVG;VALOR_NOMINAL_MAX;VALOR_NOMINAL_MIN;VALOR_PRESENTE_SUM;VALOR_PRESENTE_AVG;VALOR_PRESENTE_MAX;VALOR_PRESENTE_MIN;VALOR_AQUISICAO_SUM;VALOR_AQUISICAO_AVG; VALOR_AQUISICAO_MAX; VALOR_AQUISICAO_MIN\n"
 
 var aggregateMap = make(map[int32]*Aggregate)
 
@@ -26,8 +26,8 @@ func Write(writer *bufio.Writer) {
 	for _, aggregate := range aggregateMap {
 		numRecords = float32(aggregate.AmountOfRecords)
 
-		fmt.Fprintf(writer, "%d;%d;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f\n",
-			aggregate.DocumentNumber, aggregate.AmountOfRecords, aggregate.SumNominalValue, aggregate.SumNominalValue/numRecords,
+		fmt.Fprintf(writer, "%d;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f\n",
+			aggregate.DocumentNumber, aggregate.SumNominalValue, aggregate.SumNominalValue/numRecords,
 			aggregate.MaxNominalValue, aggregate.MinNominalValue, aggregate.SumPresentValue, aggregate.SumPresentValue/numRecords, aggregate.MaxPresentValue,
 			aggregate.MinPresentValue, aggregate.SumAcquisitionValue, aggregate.SumAcquisitionValue/numRecords, aggregate.MaxAcquisitionValue, aggregate.MinAcquisitionValue)
 

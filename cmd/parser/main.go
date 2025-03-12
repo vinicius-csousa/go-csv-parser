@@ -80,17 +80,3 @@ func profileMemory() {
 		log.Fatalf("could not write memory profile: %v", err)
 	}
 }
-
-func profileCPU() {
-	f, err := os.Create("cpuprofile.out")
-	if err != nil {
-		log.Fatal("could not create CPU profile:", err)
-	}
-	defer f.Close()
-
-	// Start CPU profiling
-	if err := pprof.StartCPUProfile(f); err != nil {
-		log.Fatal("could not start CPU profiling:", err)
-	}
-	defer pprof.StopCPUProfile()
-}

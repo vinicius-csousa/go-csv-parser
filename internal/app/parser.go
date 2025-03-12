@@ -85,16 +85,20 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 	reader.ReadSlice('\n') // skip header
 
 	var shouldSendPrevious bool
-	shouldRead := true
-	for shouldRead {
+	for {
 		// Read csv line by line
 		line, err := reader.ReadSlice('\n')
 
 		if err != nil && err != io.EOF {
 			log.Fatalf("Failed to read file: %s", filepath)
 		}
+
+		// Send last aggregate and break loop if the file has ended
 		if err == io.EOF {
-			shouldRead = false
+			if shouldSendPrevious {
+				ch <- aggregate
+			}
+			break
 		}
 
 		shouldSend := parseLine(line, &tmpAggregate, separator, filter)
@@ -113,11 +117,6 @@ func Parse(filepath string, separator byte, ch chan Aggregate, wg *sync.WaitGrou
 			aggregate.MinAcquisitionValue = min(aggregate.MinAcquisitionValue, tmpAggregate.AcquisitionValue)
 
 			aggregate.AmountOfRecords++
-
-			// Send aggregate if the file has ended
-			if !shouldRead && shouldSend {
-				ch <- aggregate
-			}
 
 		} else {
 			if aggregate.DocumentNumber != 0 && shouldSendPrevious {
