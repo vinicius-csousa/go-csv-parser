@@ -2,17 +2,18 @@ package parser
 
 import (
 	"bufio"
-	"bytes"
 	"io"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 )
 
 // Fields from the csv along with their column indices in the csv
 var Fields = struct {
+	SellerGovernmentId  int8
 	SellerName          int8
 	SponsorName         int8
 	SponsorGovernmentId int8
@@ -21,6 +22,7 @@ var Fields = struct {
 	AcquisitionValue    int8
 	DocumentNumber      int8
 }{
+	SellerGovernmentId:  3,
 	SellerName:          4,
 	SponsorName:         6,
 	SponsorGovernmentId: 7,
@@ -45,12 +47,14 @@ type Aggregate struct {
 }
 
 type SimplifiedAggregate struct {
-	SponsorName      []byte  // 24 bytes
-	SellerName       []byte  // 24 bytes
-	NominalValue     float32 // 4 bytes
-	PresentValue     float32 // 4 bytes
-	AcquisitionValue float32 // 4 bytes
-	DocumentNumber   int32   // 4 bytes
+	SponsorName         []byte   // 24 bytes
+	SellerName          []byte   // 24 bytes
+	SellerGovernmentId  [14]byte // 14 bytes
+	SponsorGovernmentId [11]byte // 11 bytes
+	NominalValue        float32  // 4 bytes
+	PresentValue        float32  // 4 bytes
+	AcquisitionValue    float32  // 4 bytes
+	DocumentNumber      int32    // 4 bytes
 }
 
 func (aggregate *Aggregate) Sum(newAggregate *Aggregate) {
@@ -156,8 +160,12 @@ func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte, f
 		endIndex = int16(i)
 
 		switch fieldNum {
+		case Fields.SellerGovernmentId:
+			parseSellerGovernmentId(line[startIndex:endIndex], &tmpAggregate.SellerGovernmentId)
 		case Fields.SellerName:
 			tmpAggregate.SellerName = line[startIndex:endIndex]
+		case Fields.SponsorGovernmentId:
+			parseSponsorGovernmentId(line[startIndex:endIndex], &tmpAggregate.SponsorGovernmentId)
 		case Fields.SponsorName:
 			tmpAggregate.SponsorName = line[startIndex:endIndex]
 		case Fields.DocumentNumber:
@@ -196,20 +204,25 @@ func parseLine(line []byte, tmpAggregate *SimplifiedAggregate, separator byte, f
 }
 
 func filterLine(filter Filter, aggregate *SimplifiedAggregate) bool {
-	val, ok := filter.(*NameFilter)
+	_, ok := filter.(*SponsorGovernmentIdFilter)
 	if ok {
-		if bytes.Equal(val.Field, []byte("seller")) {
-			return filter.Filter(aggregate.SellerName)
-		}
-		if bytes.Equal(val.Field, []byte("sponsor")) {
-			return filter.Filter(aggregate.SponsorName)
-		}
+		return filter.Filter(&aggregate.SponsorGovernmentId)
 	}
+
+	_, ok = filter.(*SellerGovernmentIdFilter)
+	if ok {
+		return filter.Filter(&aggregate.SellerGovernmentId)
+	}
+
+	_, ok = filter.(*SponsorNameContainsFilter)
+	if ok {
+		return filter.Filter(&aggregate.SponsorName)
+	}
+
 	return true
 }
 
-// Remove special characters from governmentIds
-func parseGovernmentId(governmentId []byte, formattedGovernmentId *[11]byte) {
+func parseSponsorGovernmentId(governmentId []byte, formattedGovernmentId *[11]byte) {
 	counter := 0
 
 	for i := 0; i < len(governmentId); i++ {
@@ -220,20 +233,19 @@ func parseGovernmentId(governmentId []byte, formattedGovernmentId *[11]byte) {
 	}
 }
 
-func copyBytes(receiver *[]byte, sender []byte) {
-	if len(sender) > cap(*receiver) {
-		*receiver = make([]byte, len(sender))
-	} else {
-		*receiver = (*receiver)[:len(sender)]
-	}
+func parseSellerGovernmentId(governmentId []byte, formattedGovernmentId *[14]byte) {
+	counter := 0
 
-	copy(*receiver, sender)
+	for i := 0; i < len(governmentId); i++ {
+		if governmentId[i] != '.' && governmentId[i] != '-' && governmentId[i] != '/' {
+			formattedGovernmentId[counter] = governmentId[i]
+			counter++
+		}
+	}
 }
 
-/*
-* Removes the reference of a slice (needed for []byte fields when passing
-* from the parsers to the consumer goroutine)
- */
-func releaseOwnership(slice *[]byte) {
-	*slice = nil
+func byteSliceToLowerCase(slice *[]byte) {
+	for i := 0; i < len(*slice); i++ {
+		(*slice)[i] = byte(unicode.ToLower(rune((*slice)[i])))
+	}
 }

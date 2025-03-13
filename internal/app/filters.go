@@ -9,55 +9,97 @@ type Filter interface {
 	Filter(interface{}) bool
 }
 
-type NameFilter struct {
-	Field           []byte
-	ReferenceValues [][]byte
+type SponsorNameContainsFilter struct {
+	ReferenceValue []byte
 }
 
-func (nameFilter *NameFilter) Filter(value interface{}) bool {
-	val, ok := value.([]byte)
+type SponsorGovernmentIdFilter struct {
+	ReferenceValue [11]byte
+}
+
+type SellerGovernmentIdFilter struct {
+	ReferenceValue [14]byte
+}
+
+func (governmentIdFilter *SponsorGovernmentIdFilter) Filter(value interface{}) bool {
+	val, ok := value.(*[11]byte)
 	if !ok {
 		return false
 	}
 
-	if len(nameFilter.ReferenceValues) == 0 {
+	if len(governmentIdFilter.ReferenceValue) == 0 {
 		return true
 	}
 
-	for i := 0; i < len(nameFilter.ReferenceValues); i++ {
-		if bytes.Equal(val, nameFilter.ReferenceValues[i]) {
-			return true
-		}
+	if *val == governmentIdFilter.ReferenceValue {
+		return true
 	}
 
 	return false
 }
 
+func (governmentIdFilter *SellerGovernmentIdFilter) Filter(value interface{}) bool {
+	val, ok := value.(*[14]byte)
+	if !ok {
+		return false
+	}
+
+	if len(governmentIdFilter.ReferenceValue) == 0 {
+		return true
+	}
+
+	if *val == governmentIdFilter.ReferenceValue {
+		return true
+	}
+
+	return false
+}
+
+func (sponsorNameContainsFilter *SponsorNameContainsFilter) Filter(value interface{}) bool {
+	val, ok := value.(*[]byte)
+	if !ok {
+		return false
+	}
+
+	if len(sponsorNameContainsFilter.ReferenceValue) == 0 {
+		return true
+	}
+
+	byteSliceToLowerCase(val)
+	return bytes.Contains(*val, sponsorNameContainsFilter.ReferenceValue)
+}
+
 func ParseFilter() Filter {
-	seller := flag.Bool("seller", false, "Filter by seller name")
-	sponsor := flag.Bool("sponsor", false, "Filter by sponsor name")
+	sellerGovernmentId := flag.Bool("sellerGovernmentId", false, "Filter by seller governmentId")
+	sponsorGovernmentId := flag.Bool("sponsorGovernmentId", false, "Filter by sponsor governmentId")
+	sponsorNameContains := flag.Bool("sponsorNameContains", false, "Filter by substrings in the sponsor name")
 
 	flag.Parse()
 
-	if *sponsor || *seller {
-		args := flag.Args()
-		values := make([][]byte, 0, len(args))
-		var column []byte
+	args := flag.Args()
 
-		if *sponsor {
-			column = []byte("sponsor")
-		} else {
-			column = []byte("seller")
-		}
-
-		for i := 0; i < len(args); i++ {
-			values = append(values, []byte(args[i]))
-		}
-		return &NameFilter{
-			Field:           column,
-			ReferenceValues: values,
+	if *sponsorGovernmentId {
+		var refValue [11]byte
+		parseSponsorGovernmentId([]byte(args[0]), &refValue)
+		return &SponsorGovernmentIdFilter{
+			ReferenceValue: refValue,
 		}
 	}
 
+	if *sellerGovernmentId {
+		var refValue [14]byte
+		parseSellerGovernmentId([]byte(args[0]), &refValue)
+		return &SellerGovernmentIdFilter{
+			ReferenceValue: refValue,
+		}
+	}
+
+	if *sponsorNameContains {
+		refValue := []byte(args[0])
+		byteSliceToLowerCase(&refValue)
+		return &SponsorNameContainsFilter{
+			ReferenceValue: refValue,
+		}
+	}
 	return nil
 }
