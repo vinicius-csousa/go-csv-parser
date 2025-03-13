@@ -19,7 +19,7 @@ func main() {
 
 func run() {
 	files := [10]string{
-		//"data/test.csv",
+		// "data/test.csv",
 		"data/58148845000109_Estoque_PICPAY FGTS FIDC_001.csv",
 		"data/58148845000109_Estoque_PICPAY FGTS FIDC_0039.csv",
 		"data/58148845000109_Estoque_PICPAY FGTS FIDC_0040.csv",
@@ -37,6 +37,7 @@ func run() {
 	// Channel to receive data from parsers
 	ch := make(chan parser.Aggregate)
 
+	// Check if any filter is requested
 	filter := parser.ParseFilter()
 
 	// Call for goroutines to parse files
@@ -53,11 +54,17 @@ func run() {
 	file, writer := parser.CreateOutputFile()
 	defer file.Close()
 
+	// Add each aggregate to a global slice
+	counter := 0
 	for aggregate := range ch {
-		parser.Combine(&aggregate)
+		parser.AddToSlice(&aggregate, &counter)
+		counter++
 	}
 
-	parser.Write(writer)
+	// Remove nils, sort slice, aggregate and write output
+	parser.RemoveNils()
+	parser.QuickSort(parser.AggregateSlice)
+	parser.CombineAndWrite(writer)
 }
 
 func registerPProf() {
