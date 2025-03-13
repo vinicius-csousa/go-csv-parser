@@ -12,6 +12,15 @@ import (
 )
 
 func main() {
+	// fCPU, err := os.Create("cpu.pprof")
+	// if err != nil {
+	// 	log.Fatal("could not create CPU profile: ", err)
+	// }
+	// defer fCPU.Close() // error handling omitted for example
+	// if err := pprof.StartCPUProfile(fCPU); err != nil {
+	// 	log.Fatal("could not start CPU profile: ", err)
+	// }
+	// defer pprof.StopCPUProfile()
 	registerPProf()
 	run()
 	profileMemory()
