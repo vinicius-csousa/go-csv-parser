@@ -22,8 +22,8 @@ var Fields = struct {
 	AcquisitionValue    int8
 	DocumentNumber      int8
 }{
-	SellerGovernmentId:  3,
 	SellerName:          4,
+	SellerGovernmentId:  5,
 	SponsorName:         6,
 	SponsorGovernmentId: 7,
 	NominalValue:        9,
